@@ -10,7 +10,7 @@
       delegate_to: 54.242.33.178
       register: outps
 
-   - name: print out from powershell script
+    - name: print out from powershell script
      debug:
        var: outs
        verbosity: 2
