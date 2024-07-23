@@ -11,6 +11,7 @@
         #path: "{{ remote_dir_path }}"
         path: C:\Users\Administrator\Desktop\ansible
         state: directory
+      delegate_to: 54.242.33.178
 
     - name: copy the powershell script
       ansible.windows.win_copy:
