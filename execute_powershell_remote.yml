@@ -1,7 +1,6 @@
 ---
 - name: execute powershell scripts
   hosts: localhost
-  become: yes
   vars:
     triggerapp: "AAP"
 
