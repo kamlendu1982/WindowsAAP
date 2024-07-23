@@ -12,5 +12,5 @@
 
     - name: print out from powershell script
       debug:
-       var: outs
+       var: outps
        verbosity: 2
