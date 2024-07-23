@@ -12,5 +12,4 @@
 
     - name: print out from powershell script
       debug:
-       var: outps
-       verbosity: 2
+       msg: {{ outps.stdout_lines }}
