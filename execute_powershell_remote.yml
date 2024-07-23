@@ -11,6 +11,6 @@
       register: outps
 
     - name: print out from powershell script
-     debug:
+      debug:
        var: outs
        verbosity: 2
