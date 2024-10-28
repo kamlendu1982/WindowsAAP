@@ -1,9 +1,8 @@
 ---
 - name: execute powershell scripts
-  hosts: localhost
+  hosts: windows
   vars:
     triggerapp: "AAP"
-    remote_laptop: "54.202.138.144"
     #remote_dir_path: "C:\Users\Administrator\Desktop\ansible"
 
   tasks:
@@ -12,20 +11,14 @@
         #path: "{{ remote_dir_path }}"
         path: C:\Users\Administrator\Desktop\ansible
         state: directory
-      delegate_to: "{{ remote_laptop }}"
-      #delegate_to: 54.242.33.178
 
     - name: copy the powershell script
       ansible.windows.win_copy:
         src: my_custome_powershell.ps1
         dest: C:\Users\Administrator\Desktop\ansible 
-      delegate_to: "{{ remote_laptop }}"
-      #delegate_to: 54.242.33.178
 
     - name: execute the powershell script
       ansible.windows.win_shell: C:\Users\Administrator\Desktop\ansible\my_custome_powershell.ps1 "{{ triggerapp }}"
-      delegate_to: "{{ remote_laptop }}"
-      #delegate_to: 54.242.33.178
       register: outps
 
     - name: print out from powershell script
