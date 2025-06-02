@@ -3,6 +3,9 @@
   hosts: windows
   vars:
     triggerapp: "AAP"
+    param1: "Hello"
+    param2: "World"
+    param3: "2025"
     #remote_dir_path: "C:\Users\Administrator\Desktop\ansible"
 
   tasks:
@@ -17,8 +20,8 @@
         src: my_custome_powershell.ps1
         dest: C:\Users\Administrator\Desktop\ansible 
 
-    - name: execute the powershell script
-      ansible.windows.win_shell: C:\Users\Administrator\Desktop\ansible\my_custome_powershell.ps1 "{{ triggerapp }}"
+    - name: Execute the PowerShell script
+      ansible.windows.win_shell: C:\Users\Administrator\Desktop\ansible\my_custome_powershell.ps1 -Param1 "{{ param1 }}" -Param2 "{{ param2 }}" -Param3 "{{ param3 }}" -TriggerServer "{{ triggerapp }}"
       register: outps
 
     - name: print out from powershell script
