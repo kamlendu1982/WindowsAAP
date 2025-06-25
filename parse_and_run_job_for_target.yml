@@ -7,6 +7,10 @@
         var: ansible_eda.event.body.host.hostname
 
     - name: set dynamic limit for the next job
-      ansible.builtin.set_stats:
-       data:
+      ansible.builtin.set_fact:
          dynamic_limit: "{{ ansible_eda.event.body.host.hostname }}"
+
+    - name: print server name only if the server matches
+      debug:
+        msg: "Running on {{ dynamic_limit }}"
+      when: ansible_hostname == dynamic_limit
