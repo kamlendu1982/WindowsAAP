@@ -1,0 +1,7 @@
+---
+- name: Parse the payload and get the server name
+  hosts: localhost
+  tasks:
+    - name: print server name
+      debug:
+        var: ansible.hostname
