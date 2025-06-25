@@ -1,0 +1,12 @@
+---
+- name: Parse the payload and get the server name
+  hosts: all
+  tasks:
+    - name: print server name
+      debug:
+        var: ansible_eda.event.body.host.hostname
+
+    - name: set dynamic limit for the next job
+      ansible.builtin.set_stats:
+       data:
+         dynamic_limit: "{{ ansible_eda.event.body.host.hostname }}"
