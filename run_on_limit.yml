@@ -4,4 +4,4 @@
   tasks:
     - name: print server name
       debug:
-        var: ansible.hostname
+        var: dynamic_limit
