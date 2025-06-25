@@ -4,4 +4,5 @@
   tasks:
     - name: print server name
       debug:
-        var: dynamic_limit
+        msg: "Running on {{ dynamic_limit }}"
+      when: ansible_hostname == dynamic_limit
