@@ -6,7 +6,7 @@
       ansible.windows.win_powershell:
         script: |
           # Some script that takes 30 minutes to run
-          Start-Sleep -Seconds 1800
+          Start-Sleep -Seconds 300
       async: 3600  # Max time to allow the task to run (in seconds)
       poll: 0      # Disconnect immediately (0 seconds)
       register: heavy_script_job
