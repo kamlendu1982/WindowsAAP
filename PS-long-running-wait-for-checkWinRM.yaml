@@ -1,0 +1,31 @@
+---
+- name: Execute Long Task and Wait via win_wait_for
+  hosts: windows_servers
+  tasks:
+    - name: Pre-flight - Ensure old completion flags are removed
+      ansible.windows.win_file:
+        path: C:\temp\task_complete.txt
+        state: absent
+
+    - name: Step 1 - Trigger the heavy PowerShell script asynchronously
+      ansible.windows.win_powershell:
+        script: |
+          # 1. Simulate a massive workload (e.g., software install, DB migration)
+          Start-Sleep -Seconds 300
+          
+          # 2. The critical step: Create a physical flag file when finished
+          New-Item -Path "C:\temp\task_complete.txt" -ItemType File -Force
+      async: 3600  # Maximum time allowed for the task (1 hour)
+      poll: 0      # The "fire and forget" trigger (disconnect immediately)
+
+    - name: Step 2 - Execute other tasks while the script runs
+      ansible.builtin.debug:
+        msg: "The WinRM connection is free! I can configure other things while we wait."
+
+    - name: Step 3 - Use win_wait_for to monitor for the completion flag
+      ansible.windows.win_wait_for:
+        path: C:\temp\task_complete.txt
+        state: present
+        timeout: 3600  # Max time to wait for the file to appear (1 hour)
+        sleep: 30      # Check the file system every 30 seconds
+...
