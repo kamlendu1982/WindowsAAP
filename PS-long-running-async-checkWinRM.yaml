@@ -1,21 +1,24 @@
 ---
-- name: Step 1 - Start a heavy, long-running Windows script asynchronously
-  ansible.windows.win_powershell:
-    script: |
-      # Some script that takes 30 minutes to run
-      Start-Sleep -Seconds 1800
-  async: 3600  # Max time to allow the task to run (in seconds)
-  poll: 0      # Disconnect immediately (0 seconds)
-  register: heavy_script_job
+- name: Execute Long Task and Wait via async_status
+  hosts: all
+  tasks:
+    - name: Step 1 - Start a heavy, long-running Windows script asynchronously
+      ansible.windows.win_powershell:
+        script: |
+          # Some script that takes 30 minutes to run
+          Start-Sleep -Seconds 1800
+      async: 3600  # Max time to allow the task to run (in seconds)
+      poll: 0      # Disconnect immediately (0 seconds)
+      register: heavy_script_job
 
-- name: Step 2 - Do other fast tasks while the script runs in the background
-  ansible.windows.win_ping:
+    - name: Step 2 - Do other fast tasks while the script runs in the background
+      ansible.windows.win_ping:
 
-- name: Step 3 - Check back on the heavy script to see if it finished
-  ansible.builtin.async_status:
-    jid: "{{ heavy_script_job.ansible_job_id }}"
-  register: job_result
-  until: job_result.finished
-  retries: 60  # Check 60 times
-  delay: 60
+    - name: Step 3 - Check back on the heavy script to see if it finished
+      ansible.builtin.async_status:
+        jid: "{{ heavy_script_job.ansible_job_id }}"
+      register: job_result
+      until: job_result.finished
+      retries: 60  # Check 60 times
+      delay: 60
   ...

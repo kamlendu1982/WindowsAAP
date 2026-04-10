@@ -1,6 +1,6 @@
 ---
 - name: Execute Long Task and Wait via win_wait_for
-  hosts: windows_servers
+  hosts: all 
   tasks:
     - name: Pre-flight - Ensure old completion flags are removed
       ansible.windows.win_file:
