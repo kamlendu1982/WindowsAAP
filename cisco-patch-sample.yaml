@@ -1,0 +1,272 @@
+---
+# Cisco IOS-XE / NX-OS Security Patching - Reference Playbook
+# Requirements: cisco.ios, cisco.nxos, ansible.netcommon
+# Extra vars: target_version, image_server, cr_number
+ 
+- name: Pre-patch validation
+  hosts: cisco_devices
+  gather_facts: false
+  serial: "10%"
+  tasks:
+    - name: Gather facts (IOS-XE)
+      cisco.ios.ios_facts:
+        gather_subset: [hardware, default]
+      register: pre_facts
+      when: ansible_network_os == 'cisco.ios.ios'
+ 
+    - name: Gather facts (NX-OS)
+      cisco.nxos.nxos_facts:
+        gather_subset: [hardware, default]
+      register: pre_facts
+      when: ansible_network_os == 'cisco.nxos.nxos'
+ 
+    - name: Set pre-patch version fact
+      ansible.builtin.set_fact:
+        pre_version: "{{ pre_facts.ansible_net_version }}"
+        pre_image:   "{{ pre_facts.ansible_net_image }}"
+ 
+    - name: Skip host if already on target version
+      ansible.builtin.meta: end_host
+      when: pre_version == target_version
+ 
+    - name: Capture pre-patch state (IOS-XE)
+      cisco.ios.ios_command:
+        commands:
+          - show version
+          - show ip route summary
+          - show ip bgp summary
+          - show redundancy
+          - show environment all
+      register: pre_state
+      when: ansible_network_os == 'cisco.ios.ios'
+ 
+    - name: Capture pre-patch state (NX-OS)
+      cisco.nxos.nxos_command:
+        commands:
+          - show version
+          - show ip route summary
+          - show vpc
+          - show environment
+          - show module
+      register: pre_state
+      when: ansible_network_os == 'cisco.nxos.nxos'
+ 
+    - name: Save pre-patch state locally
+      ansible.builtin.copy:
+        content: "{{ pre_state.stdout | join('\n\n---\n\n') }}"
+        dest: "/tmp/pre_{{ inventory_hostname }}_{{ cr_number }}.txt"
+      delegate_to: localhost
+ 
+- name: Stage image and set boot variable
+  hosts: cisco_devices
+  gather_facts: false
+  serial: "10%" 
+  vars:
+    iosxe_image: "cat9k_iosxe.{{ target_version }}.SPA.bin"
+    nxos_image:  "nxos.{{ target_version }}.bin"
+ 
+  tasks:
+    - name: Check if IOS-XE image already on flash
+      cisco.ios.ios_command:
+        commands: "dir flash: | include {{ iosxe_image }}"
+      register: flash_check
+      when: ansible_network_os == 'cisco.ios.ios'
+ 
+    - name: Copy IOS-XE image from HTTP server
+      cisco.ios.ios_command:
+        commands:
+          - "copy https://{{ image_server }}/cisco/iosxe/{{ iosxe_image }} flash:{{ iosxe_image }}"
+        wait_for:
+          - result[0] contains bytes copied
+        interval: 30
+        retries: 40
+      when:
+        - ansible_network_os == 'cisco.ios.ios'
+        - iosxe_image not in flash_check.stdout[0]
+ 
+    - name: Set IOS-XE boot variable
+      cisco.ios.ios_config:
+        lines:
+          - "no boot system"
+          - "boot system flash:{{ iosxe_image }}"
+        save_when: always
+      when: ansible_network_os == 'cisco.ios.ios'
+ 
+    - name: Check if NX-OS image already on bootflash
+      cisco.nxos.nxos_command:
+        commands: "dir bootflash: | include {{ nxos_image }}"
+      register: bootflash_check
+      when: ansible_network_os == 'cisco.nxos.nxos'
+ 
+    - name: Copy NX-OS image from HTTP server
+      cisco.nxos.nxos_command:
+        commands:
+          - "copy https://{{ image_server }}/cisco/nxos/{{ nxos_image }} bootflash:{{ nxos_image }} vrf management"
+        wait_for:
+          - result[0] contains Copy complete
+        interval: 30
+        retries: 40
+      when:
+        - ansible_network_os == 'cisco.nxos.nxos'
+        - nxos_image not in bootflash_check.stdout[0]
+ 
+    - name: Set NX-OS boot variable
+      cisco.nxos.nxos_config:
+        lines:
+          - "boot nxos bootflash:{{ nxos_image }}"
+        save_when: always
+      when: ansible_network_os == 'cisco.nxos.nxos' 
+ 
+- name: Reload and wait for recovery
+  hosts: cisco_devices
+  gather_facts: false
+  serial: "5%" 
+  tasks: 
+    - name: Save config before reload (IOS-XE)
+      cisco.ios.ios_command:
+        commands: write memory
+      when: ansible_network_os == 'cisco.ios.ios'
+ 
+    - name: Save config before reload (NX-OS)
+      cisco.nxos.nxos_config:
+        save_when: always
+      when: ansible_network_os == 'cisco.nxos.nxos'
+ 
+    - name: Reload IOS-XE
+      cisco.ios.ios_command:
+        commands:
+          - command: reload
+            prompt: '[confirm]'
+            answer: "\r"
+      async: 1
+      poll: 0
+      when: ansible_network_os == 'cisco.ios.ios'
+ 
+    - name: Reload NX-OS
+      cisco.nxos.nxos_command:
+        commands:
+          - command: reload
+            prompt: 'This command will reboot the system'
+            answer: 'y'
+      async: 1
+      poll: 0
+      when: ansible_network_os == 'cisco.nxos.nxos'
+ 
+    - name: Wait for device to go offline
+      ansible.builtin.wait_for:
+        host: "{{ ansible_host }}"
+        port: 22
+        state: absent
+        delay: 30
+        timeout: 120
+      delegate_to: localhost
+ 
+    - name: Wait for device to come back online
+      ansible.builtin.wait_for:
+        host: "{{ ansible_host }}"
+        port: 22
+        state: started
+        delay: "{{ '120' if ansible_network_os == 'cisco.ios.ios' else '180' }}"
+        timeout: 720
+      delegate_to: localhost
+ 
+    - name: Allow processes to stabilize
+      ansible.builtin.pause:
+        seconds: 30
+ 
+ 
+- name: Post-patch validation and rollback
+  hosts: cisco_devices
+  gather_facts: false 
+  vars:
+    iosxe_image: "cat9k_iosxe.{{ target_version }}.SPA.bin"
+    nxos_image:  "nxos.{{ target_version }}.bin"
+ 
+  tasks:
+ 
+    - name: Gather post-patch facts (IOS-XE)
+      cisco.ios.ios_facts:
+        gather_subset: [hardware, default]
+      register: post_facts
+      when: ansible_network_os == 'cisco.ios.ios'
+ 
+    - name: Gather post-patch facts (NX-OS)
+      cisco.nxos.nxos_facts:
+        gather_subset: [hardware, default]
+      register: post_facts
+      when: ansible_network_os == 'cisco.nxos.nxos'
+ 
+    - name: Set patch status
+      ansible.builtin.set_fact:
+        patch_success: "{{ post_facts.ansible_net_version == target_version }}"
+        post_version:  "{{ post_facts.ansible_net_version }}"
+ 
+    - name: Print patch result
+      ansible.builtin.debug:
+        msg: >
+          {{ inventory_hostname }} | Pre: {{ pre_version }}
+          | Post: {{ post_version }}
+          | Status: {{ 'SUCCESS' if patch_success else 'FAILED' }}
+ 
+    # ── Rollback block — runs only if version mismatch ─────────────
+ 
+    - name: Rollback - revert IOS-XE boot variable
+      cisco.ios.ios_config:
+        lines:
+          - "no boot system"
+          - "boot system flash:{{ pre_image }}"
+        save_when: always
+      when:
+        - not patch_success
+        - ansible_network_os == 'cisco.ios.ios'
+ 
+    - name: Rollback - reload IOS-XE to previous image
+      cisco.ios.ios_command:
+        commands:
+          - command: reload
+            prompt: '[confirm]'
+            answer: "\r"
+      async: 1
+      poll: 0
+      when:
+        - not patch_success
+        - ansible_network_os == 'cisco.ios.ios'
+ 
+    - name: Rollback - revert NX-OS boot variable
+      cisco.nxos.nxos_config:
+        lines:
+          - "boot nxos bootflash:{{ pre_image }}"
+        save_when: always
+      when:
+        - not patch_success
+        - ansible_network_os == 'cisco.nxos.nxos'
+ 
+    - name: Rollback - reload NX-OS to previous image
+      cisco.nxos.nxos_command:
+        commands:
+          - command: reload
+            prompt: 'This command will reboot the system'
+            answer: 'y'
+      async: 1
+      poll: 0
+      when:
+        - not patch_success
+        - ansible_network_os == 'cisco.nxos.nxos'
+ 
+    - name: Rollback - wait for device recovery
+      ansible.builtin.wait_for:
+        host: "{{ ansible_host }}"
+        port: 22
+        state: started
+        delay: 120
+        timeout: 720
+      delegate_to: localhost
+      when: not patch_success
+ 
+    - name: Fail play if rollback was triggered
+      ansible.builtin.fail:
+        msg: >
+          PATCH FAILED on {{ inventory_hostname }}.
+          Expected {{ target_version }}, got {{ post_version }}.
+          Rolled back to {{ pre_image }}.
+      when: not patch_success
